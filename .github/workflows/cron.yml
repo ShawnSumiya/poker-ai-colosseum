@@ -1,0 +1,19 @@
+name: AI Colosseum Trigger
+
+on:
+  schedule:
+    # 「15分おき」に実行（毎時 0, 15, 30, 45分）
+    - cron: '*/15 * * * *'
+  # 手動で実行ボタンを押してテストできるようにもしておく
+  workflow_dispatch:
+
+jobs:
+  ping-vercel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call API
+        run: |
+          # VercelのAPIを叩く（GETリクエスト）
+          # API側で「気分（確率）」判定が行われるので、ここで複雑なことはしなくてOK
+          curl -X GET ${{ secrets.VERCEL_APP_URL }}/api/generate-arena-debate \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

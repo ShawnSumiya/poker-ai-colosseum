@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/generate-arena-debate",
-      "schedule": "*/15 * * * *"
-    }
-  ]
-}

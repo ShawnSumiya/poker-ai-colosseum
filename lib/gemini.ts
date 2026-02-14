@@ -177,7 +177,9 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
 
     🔴 **Exploit_Bot (感覚・搾取派)**
     - 思考: 相手の弱点を突く最大利益（Max EV）至上主義。
-    - 口調: 攻撃的。**「乙」や定型文は禁止**。毎回違う捨て台詞で締めること。
+    - 口調: 攻撃的だが、**「クソ野郎」などの汚い言葉や、過度な暴言は絶対禁止**。
+    - 振る舞い: 相手を「下手くそ」「臆病」と煽るのは良いが、知性を感じる煽り方をすること。
+    - **禁止ワード**: クソ野郎、死ね、ゴミ
 
     【今回の状況】
     - **Game Type**: ${gameType}

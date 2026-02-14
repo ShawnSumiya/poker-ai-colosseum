@@ -6,7 +6,7 @@ import type { Json } from "@/types/supabase";
 export const dynamic = "force-dynamic";
 
 /** サイコロを振る: 1〜100の乱数で、閾値以下なら「投稿する」とみなす */
-const POST_PROBABILITY = 15; // 15% → 平均 1.5〜2時間に1回程度
+const POST_PROBABILITY = 30; // 15% → 平均 1.5〜2時間に1回程度
 
 function rollDice(): boolean {
   const roll = Math.floor(Math.random() * 100) + 1; // 1〜100

@@ -10,19 +10,19 @@ const model = genAI.getGenerativeModel({
   }
 });
 
-// ★修正: 後方互換性のため、新しいフィールドに「?」をつけて任意項目にする
+// ★修正: すべての項目を ? (任意) にし、型も string に緩めることでエラーを回避
 export type PokerScenario = {
-  gameType: "Cash" | "MTT";
-  players?: number;       // ★ ?を追加
-  stackDepth: number;
-  potSize?: number;       // ★ ?を追加
-  potType?: string;       // ★ ?を追加
+  gameType?: string;       // "Cash" | "MTT" 以外も許容（内部でデフォルト化）
+  players?: number;
+  stackDepth?: number;     // ここも任意に変更（なければ100にする）
+  potSize?: number;
+  potType?: string;
   heroHand?: string;
   board?: string;
   heroPosition?: string;
   villainPosition?: string;
   context?: string;
-  durationMode?: "Short" | "Medium" | "Long"; // ★ ?を追加
+  durationMode?: "Short" | "Medium" | "Long";
 };
 
 export type DebateContext = {
@@ -36,7 +36,6 @@ function cleanJsonString(text: string): string {
   return clean;
 }
 
-// ハンドレンジ定義
 const HAND_RANGES = {
   premium: ["AA", "KK", "QQ", "JJ", "TT", "AKs", "AQs", "AJs", "KQs", "AKo", "AQo"],
   playable: ["99", "88", "77", "66", "55", "44", "33", "22", "ATs", "KJs", "KTs", "QJs", "QTs", "JTs", "AJo", "KQo", "KJo", "QJo"],
@@ -133,14 +132,17 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
   const gtoPercentage = context?.gtoPercentage ?? 50;
   const exploitPercentage = context?.exploitPercentage ?? 50;
   
-  // ★安全策: undefinedの場合はデフォルト値を使う
+  // ★安全策: 全ての項目にデフォルト値を設定
+  const gameType = scenario?.gameType || "Cash";
+  const stackDepth = scenario?.stackDepth || 100;
   const potSize = scenario?.potSize ?? 0;
   const potType = scenario?.potType ?? "Standard Pot";
   const durationMode = scenario?.durationMode ?? "Medium";
+  const heroHand = scenario?.heroHand || "Random Hand";
 
-  // SPR計算 (potSizeが0の場合は Unknown にする)
-  const spr = (scenario?.stackDepth && potSize > 0) 
-    ? (scenario.stackDepth / potSize).toFixed(2) 
+  // SPR計算
+  const spr = (stackDepth && potSize > 0) 
+    ? (stackDepth / potSize).toFixed(2) 
     : "Unknown";
 
   let durationInstruction = "";
@@ -163,7 +165,7 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     【登場人物】
     🃏 **Dealer (状況設定 & 審判)**
     - 役割: 議論の開始時に、**Heroのハンド**、**ボード**、**詳細な状況**を提示する。
-    - **★重要**: 最初の発言の冒頭に、必ず **【Hero Hand】: ${scenario?.heroHand || "Random"}** と表示すること。
+    - **★重要**: 最初の発言の冒頭に、必ず **【Hero Hand】: ${heroHand}** と表示すること。
     
     🔵 **GTO_Bot (理論派)**
     - 思考: 均衡解（Nash Equilibrium）至上主義。
@@ -174,13 +176,13 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     - 口調: 攻撃的。**「乙」や定型文は禁止**。毎回違う捨て台詞で締めること。
 
     【今回の状況】
-    - **Game Type**: ${scenario?.gameType}
+    - **Game Type**: ${gameType}
     - **Situation**: ${potType}
-    - **Effective Stack**: ${scenario?.stackDepth} BB
+    - **Effective Stack**: ${stackDepth} BB
     - **Pot Size (Flop)**: ${potSize} BB
     - **SPR (Stack to Pot Ratio)**: ${spr}
     - **Context**: ${scenario?.context || "Standard"}
-    - **Hand**: ${scenario?.heroHand || "Unknown"}
+    - **Hand**: ${heroHand}
 
     【戦略指示】
     - **SPR = ${spr}** の状況を考慮してください。

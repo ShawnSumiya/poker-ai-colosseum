@@ -10,12 +10,12 @@ const model = genAI.getGenerativeModel({
   }
 });
 
-// ★修正: すべての項目を ? (任意) にし、型も string に緩めることでエラーを回避
+// ★修正: stackDepth と potSize を string | number に変更
 export type PokerScenario = {
-  gameType?: string;       // "Cash" | "MTT" 以外も許容（内部でデフォルト化）
+  gameType?: string;
   players?: number;
-  stackDepth?: number;     // ここも任意に変更（なければ100にする）
-  potSize?: number;
+  stackDepth?: number | string; // ★ここを修正（文字列も許容）
+  potSize?: number | string;    // ★念のためここも修正
   potType?: string;
   heroHand?: string;
   board?: string;
@@ -132,10 +132,14 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
   const gtoPercentage = context?.gtoPercentage ?? 50;
   const exploitPercentage = context?.exploitPercentage ?? 50;
   
-  // ★安全策: 全ての項目にデフォルト値を設定
+  // ★安全策: 受け取った値を数値に変換して使う
   const gameType = scenario?.gameType || "Cash";
-  const stackDepth = scenario?.stackDepth || 100;
-  const potSize = scenario?.potSize ?? 0;
+  const rawStackDepth = scenario?.stackDepth ?? 100;
+  const stackDepth = Number(rawStackDepth); // ここで数値化
+  
+  const rawPotSize = scenario?.potSize ?? 0;
+  const potSize = Number(rawPotSize); // ここで数値化
+
   const potType = scenario?.potType ?? "Standard Pot";
   const durationMode = scenario?.durationMode ?? "Medium";
   const heroHand = scenario?.heroHand || "Random Hand";

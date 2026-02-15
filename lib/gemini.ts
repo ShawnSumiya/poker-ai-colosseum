@@ -10,12 +10,12 @@ const model = genAI.getGenerativeModel({
   }
 });
 
-// ★修正: stackDepth と potSize を string | number に変更
+// 型定義
 export type PokerScenario = {
   gameType?: string;
   players?: number;
-  stackDepth?: number | string; // ★ここを修正（文字列も許容）
-  potSize?: number | string;    // ★念のためここも修正
+  stackDepth?: number | string;
+  potSize?: number | string;
   potType?: string;
   heroHand?: string;
   board?: string;
@@ -36,6 +36,15 @@ function cleanJsonString(text: string): string {
   return clean;
 }
 
+/** AIの表記ゆれ（GTO, GTO_Bot, gto_bot 等）をフロントが期待する "gto" | "exploit" | "dealer" に正規化 */
+function normalizeSpeaker(speaker: unknown): "gto" | "exploit" | "dealer" {
+  const s = typeof speaker === "string" ? speaker.toLowerCase().trim() : "";
+  if (s === "gto" || s === "gto_bot" || s.startsWith("gto")) return "gto";
+  if (s === "exploit" || s === "exploit_bot" || s.startsWith("exploit")) return "exploit";
+  return "dealer";
+}
+
+// ハンドレンジ定義
 const HAND_RANGES = {
   premium: ["AA", "KK", "QQ", "JJ", "TT", "AKs", "AQs", "AJs", "KQs", "AKo", "AQo"],
   playable: ["99", "88", "77", "66", "55", "44", "33", "22", "ATs", "KJs", "KTs", "QJs", "QTs", "JTs", "AJo", "KQo", "KJo", "QJo"],
@@ -61,6 +70,7 @@ function getRandomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// シナリオ生成ロジック
 export function generateRandomScenario(): PokerScenario {
   const gameType = Math.random() > 0.5 ? "Cash" : "MTT";
   
@@ -68,13 +78,14 @@ export function generateRandomScenario(): PokerScenario {
   if (gameType === "Cash") {
     const rand = Math.random();
     if (rand < 0.6) stackDepth = 100; 
-    else if (rand < 0.8) stackDepth = getRandomInt(150, 300);
-    else stackDepth = getRandomInt(40, 90);
+    else if (rand < 0.8) stackDepth = getRandomInt(150, 300); // Deep
+    else stackDepth = getRandomInt(40, 90); // Short
   } else {
+    // MTT
     const rand = Math.random();
-    if (rand < 0.3) stackDepth = getRandomInt(5, 15);
-    else if (rand < 0.7) stackDepth = getRandomInt(20, 40);
-    else stackDepth = getRandomInt(41, 80);
+    if (rand < 0.3) stackDepth = getRandomInt(10, 20);
+    else if (rand < 0.7) stackDepth = getRandomInt(25, 50);
+    else stackDepth = getRandomInt(51, 100);
   }
 
   const potRand = Math.random();
@@ -86,14 +97,14 @@ export function generateRandomScenario(): PokerScenario {
     potSize = getRandomInt(5, 8);
   } else if (potRand < 0.9) {
     potType = "3-Bet Pot";
-    potSize = getRandomInt(18, 25);
+    potSize = getRandomInt(15, 25);
   } else {
     potType = "4-Bet Pot";
-    potSize = getRandomInt(40, 55);
+    potSize = getRandomInt(40, 60);
   }
 
   if (stackDepth < potSize / 2) {
-    potType = "Limped Pot / All-in situation"; 
+    potType = "All-in situation"; 
     potSize = stackDepth; 
   }
 
@@ -103,11 +114,10 @@ export function generateRandomScenario(): PokerScenario {
     "Villain is a Nit (Tight)",
     "Hero has a tight image",
     "Dynamic Board Texture",
-    "Villain just lost a huge pot (Tilt?)",
     "Standard Reg vs Reg"
   ];
   if (gameType === "MTT") {
-    contexts.push("Bubble Period (ICM pressure extreme)", "Final Table (Huge Payjump)", "Bounty Tournament (KO incentive)");
+    contexts.push("Bubble Period (ICM pressure)", "Final Table", "Bounty Tournament");
   }
 
   const durationRand = Math.random();
@@ -132,15 +142,13 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
   const gtoPercentage = context?.gtoPercentage ?? 50;
   const exploitPercentage = context?.exploitPercentage ?? 50;
   
-  // ★安全策: 受け取った値を数値に変換して使う
+  // 値の正規化
   const gameType = scenario?.gameType || "Cash";
   const rawStackDepth = scenario?.stackDepth ?? 100;
-  const stackDepth = Number(rawStackDepth); // ここで数値化
-  
-  const rawPotSize = scenario?.potSize ?? 0;
-  const potSize = Number(rawPotSize); // ここで数値化
-
-  const potType = scenario?.potType ?? "Standard Pot";
+  const stackDepth = Number(rawStackDepth);
+  const rawPotSize = scenario?.potSize ?? 6;
+  const potSize = Number(rawPotSize);
+  const potType = scenario?.potType ?? "Single Raised Pot";
   const durationMode = scenario?.durationMode ?? "Medium";
   const heroHand = scenario?.heroHand || "Random Hand";
 
@@ -166,51 +174,56 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     - GTO派支配率: ${gtoPercentage}%
     - Exploit派支配率: ${exploitPercentage}%
 
-    【登場人物】
-    🃏 **Dealer (状況設定 & 審判)**
-    - 役割: 議論の開始時に、**Heroのハンド**、**ボード**、**詳細な状況**を提示する。
-    - **★重要**: 最初の発言の冒頭に、必ず **【Hero Hand】: ${heroHand}** と表示すること。
+    【登場人物の設定（厳守）】
+    
+    🃏 **Dealer (状況設定)**
+    - 役割: 議論の開始時に状況を説明する。
+    - **出力ルール**:
+      - 冒頭に必ず **【Hero Hand】: ${heroHand}** と書くこと。
+      - 状況説明では **「有効スタック(BB): ${stackDepth}BB」** と明記すること。
+      - Dealerは客観的な事実のみを述べ、SPRなどの専門用語で評価しないこと。
     
     🔵 **GTO_Bot (理論派)**
+    - **speakerキー**: 必ず "gto" (すべて小文字) にすること。
     - 思考: 均衡解（Nash Equilibrium）至上主義。
-    - 口調: 断定的。「〜です。」
+    - 口調: 冷静、断定的。「〜です。」「頻度は〜%です。」
 
     🔴 **Exploit_Bot (感覚・搾取派)**
+    - **speakerキー**: 必ず "exploit" (すべて小文字) にすること。
     - 思考: 相手の弱点を突く最大利益（Max EV）至上主義。
-    - 口調: 攻撃的だが、**「クソ野郎」などの汚い言葉や、過度な暴言は絶対禁止**。
-    - 振る舞い: 相手を「下手くそ」「臆病」と煽るのは良いが、知性を感じる煽り方をすること。
-    - **禁止ワード**: クソ野郎、死ね、ゴミ
+    - 口調: 攻撃的だが、**「クソ野郎」「死ね」などの汚い言葉は禁止**。「下手くそ」「臆病」といった知性のある煽り方をすること。
+    - **禁止ワード**: クソ野郎, ゴミ, 死ね
 
-    【今回の状況】
-    - **Game Type**: ${gameType}
-    - **Situation**: ${potType}
-    - **Effective Stack**: ${stackDepth} BB
-    - **Pot Size (Flop)**: ${potSize} BB
-    - **SPR (Stack to Pot Ratio)**: ${spr}
-    - **Context**: ${scenario?.context || "Standard"}
-    - **Hand**: ${heroHand}
+    【今回のハンド状況】
+    - Game: ${gameType}
+    - Situation: ${potType}
+    - **Effective Stack**: ${stackDepth} BB (重要)
+    - Pot Size: ${potSize} BB
+    - Context: ${scenario?.context || "Standard"}
+    - Hand: ${heroHand}
+    - (内部計算用SPR: ${spr})
 
-    【戦略指示】
-    - **SPR = ${spr}** の状況を考慮してください。
-      - SPRが13以上ならディープスタック戦略。
-      - SPRが2以下ならコミットメント戦略。
-    
-    【議論の長さ指示: ${durationMode}】
+    【戦略指示とSPRの扱い】
+    - **Dealer**: SPRという単語を使わず、「有効スタック: ${stackDepth}BB」と表記してください。
+    - **GTO / Exploit**: 議論の中で **「SPR (Stack-to-Pot Ratio)」** という用語を使って議論しても構いません。（例：「SPRが低いのでコミットすべき」「SPRが高いのでインプライドオッズがある」など）
+    - **SPR = ${spr}** の状況を考慮し、ディープならインプライドオッズを、ショートならコミットを意識した議論をさせてください。
+
+    【議論の長さ: ${durationMode}】
     ${durationInstruction}
 
     【出力形式 (JSON)】
-    議論は **Dealerの状況提示** から始まり、**GTOとExploitが交互に短く殴り合う** 形式にしてください。
+    JSON構造を厳守してください。speakerキーは大文字禁止です。
     
-    JSON構造:
+    JSON Example:
     {
-      "title": "議論タイトル",
+      "title": "88 vs Aggro in 3-Bet Pot",
       "scenario": { ... },
       "transcript": [
-        { "speaker": "dealer", "content": "**【Hero Hand】: ...**\\n\\n状況..." },
-        { "speaker": "gto", "content": "..." },
-        { "speaker": "exploit", "content": "..." }
+        { "speaker": "dealer", "content": "**【Hero Hand】: ${heroHand}**\\n\\n状況は${gameType}です。有効スタック(BB): ${stackDepth}BBのディープスタック戦です..." },
+        { "speaker": "gto", "content": "この状況ではチェックが安定です。" },
+        { "speaker": "exploit", "content": "SPRを見てみろよ、ここで打たないとかありえないだろ。" }
       ],
-      "winner": "gto" 
+      "winner": "exploit" 
     }
   `;
 
@@ -221,10 +234,20 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     const cleanedText = cleanJsonString(text);
     const jsonData = JSON.parse(cleanedText);
     
+    // 安全装置: 勝者が空ならランダム
     if (!jsonData.winner) {
       jsonData.winner = Math.random() > 0.5 ? "gto" : "exploit";
     }
-    jsonData.winner = jsonData.winner.toLowerCase();
+    const winnerNorm = normalizeSpeaker(jsonData.winner);
+    jsonData.winner = winnerNorm === "dealer" ? "gto" : winnerNorm;
+
+    // 安全装置: speakerを正規化（GTO_Bot→gto 等の表記ゆれでフロントが全部Exploit扱いになるのを防ぐ）
+    if (jsonData.transcript && Array.isArray(jsonData.transcript)) {
+      jsonData.transcript = jsonData.transcript.map((t: { speaker?: unknown; content?: string }) => ({
+        ...t,
+        speaker: normalizeSpeaker(t.speaker),
+      }));
+    }
 
     return jsonData;
   } catch (error) {

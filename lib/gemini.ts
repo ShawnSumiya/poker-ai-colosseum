@@ -180,7 +180,7 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     - 役割: 議論の開始時に状況を説明する。
     - **出力ルール**:
       - 冒頭に必ず **【Hero Hand】: ${heroHand}** と書くこと。
-      - 状況説明では **「有効スタック(BB): ${stackDepth}BB」** と明記すること。
+      - 状況説明では **「有効スタック: ${stackDepth}BB」** と明記すること。
       - Dealerは客観的な事実のみを述べ、SPRなどの専門用語で評価しないこと。
     
     🔵 **GTO_Bot (理論派)**
@@ -258,5 +258,59 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
       transcript: [{ speaker: "dealer", content: "AI接続エラー。" }],
       winner: "gto" 
     };
+  }
+}
+
+/** 既存スレッドの続きを書く関数 */
+export async function continueDebate(
+  currentTranscript: { speaker?: unknown; content?: string }[],
+  scenario: PokerScenario
+) {
+  const contextStr = JSON.stringify(scenario);
+  const recentHistory = currentTranscript.slice(-5);
+  const historyStr = JSON.stringify(recentHistory);
+
+  const prompt = `
+    あなたはポーカー掲示板のAIです。以下の進行中の議論の【続き】を生成してください。
+    
+    【状況】
+    ${contextStr}
+
+    【直近の会話】
+    ${historyStr}
+
+    【指示】
+    - 前回の会話の流れを汲み取り、さらに深く、熱い議論を展開してください。
+    - GTO派とExploit派がお互いの主張の矛盾を突き、具体的なレンジやアクション頻度、心理戦について語り合ってください。
+    - **SPR** という用語を積極的に使い、スタックサイズに基づいた議論を行ってください。
+    - Exploit Botは口が悪く、GTO Botは冷静です。
+    - 新たに **3〜5ターン分** の会話を追加してください。
+    - Dealerは喋らせないでください。
+
+    【出力形式 (JSON)】
+    新しい会話部分のみを配列で返してください。
+    Example:
+    [
+      { "speaker": "gto", "content": "しかし、そのSPRではチェックレイズの頻度は低くなります。" },
+      { "speaker": "exploit", "content": "うるさいな、相手が降りすぎるなら打つだけだ。" }
+    ]
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const cleanedText = cleanJsonString(response.text());
+    const newTranscript = JSON.parse(cleanedText);
+
+    if (Array.isArray(newTranscript)) {
+      return newTranscript.map((t: { speaker?: unknown; content?: string }) => ({
+        ...t,
+        speaker: normalizeSpeaker(t.speaker),
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error("Continue Debate Error:", error);
+    return [];
   }
 }

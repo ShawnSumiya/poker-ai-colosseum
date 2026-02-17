@@ -18,7 +18,7 @@ export interface PokerScenario {
  * 議論の1ターン
  */
 export interface DebateTurn {
-  speaker: "gto" | "exploit" | "dealer";
+  speaker: "gto" | "exploit" | "dealer" | "noob";
   content: string;
   timestamp?: string; // ISO 8601（生成・保存時の時刻）
 }

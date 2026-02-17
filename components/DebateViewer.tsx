@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment } from "react";
-import { User, Cpu } from "lucide-react";
 import { renderTextWithCardBadges } from "./CardBadge";
 import { cn } from "@/lib/utils";
 import type { DebateTurn } from "@/lib/types";
@@ -19,7 +18,7 @@ const formatMessageTime = (isoString: string) => {
 };
 
 /** テキスト装飾関数（強化版）: \n → 改行、**text** → 太字、カード表記 → バッジ */
-const formatText = (text: string, _speaker: "gto" | "exploit" | "dealer") => {
+const formatText = (text: string, _speaker: "gto" | "exploit" | "dealer" | "noob") => {
   if (!text) return null;
 
   // 0. リテラル \n を実際の改行に変換
@@ -64,7 +63,7 @@ function normalizeTurn(
 ): DebateTurn {
   const speaker = (turn as DebateTurn).speaker ?? (turn as { role?: string }).role ?? "dealer";
   return {
-    speaker: speaker as "gto" | "exploit" | "dealer",
+    speaker: speaker as "gto" | "exploit" | "dealer" | "noob",
     content: turn.content,
     ...(turn.timestamp != null && { timestamp: turn.timestamp }),
   };
@@ -89,66 +88,75 @@ export function DebateViewer({ transcript, scenario, className }: DebateViewerPr
       )}
       <div className="flex flex-col space-y-4 p-4 bg-slate-950/30 rounded-lg">
         {turns.map((turn, i) => {
+          const isDealer = turn.speaker === "dealer";
           const isGto = turn.speaker === "gto";
           const isExploit = turn.speaker === "exploit";
-          const isDealer = turn.speaker === "dealer";
+          const isNoob = turn.speaker === "noob";
 
-          // Dealer（状況説明）は中央表示
-          if (isDealer) {
-            return (
-              <div key={i} className="flex flex-col items-center mb-4">
-                <div className="bg-slate-800/80 text-slate-400 text-sm px-4 py-2 rounded-full border border-slate-700 shadow-sm max-w-[90%] text-center">
-                  {formatText(turn.content, "dealer")}
-                </div>
-                {turn.timestamp && (
-                  <span className="text-[10px] text-gray-500 mt-1 text-center">
-                    {formatMessageTime(turn.timestamp)}
-                  </span>
-                )}
-              </div>
-            );
-          }
-
-          // GTO: 左（青） / Exploit: 右（赤）
           return (
             <div
               key={i}
               className={cn(
-                "flex flex-col w-full mb-4",
-                isGto ? "items-start" : "items-end"
+                "flex flex-col mb-4",
+                isDealer ? "items-center" : isGto ? "items-start" : isExploit ? "items-end" : "items-center"
               )}
             >
               <div
                 className={cn(
-                  "max-w-[85%] md:max-w-[75%] rounded-2xl p-4 shadow-md relative group transition-all hover:scale-[1.01]",
-                  isGto
-                    ? "bg-slate-800 text-slate-100 rounded-tl-none border-l-4 border-blue-500"
-                    : "bg-slate-800 text-slate-100 rounded-tr-none border-r-4 border-red-500"
+                  "flex items-end gap-2",
+                  isExploit ? "flex-row-reverse" : "flex-row"
                 )}
               >
-                {/* Speaker Label */}
+                {/* アイコン表示エリア */}
                 <div
                   className={cn(
-                    "text-xs font-bold mb-1 flex items-center gap-1 uppercase tracking-wider",
-                    isGto ? "text-blue-400" : "text-red-400 justify-end"
+                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                    isDealer && "bg-gray-700 text-white",
+                    isGto && "bg-blue-600 text-white",
+                    isExploit && "bg-red-600 text-white",
+                    isNoob && "bg-green-500 text-white"
                   )}
                 >
-                  {isGto ? <Cpu size={14} /> : null}
-                  {isGto ? "GTO Bot" : "Exploit Bot"}
-                  {!isGto ? <User size={14} /> : null}
+                  {isDealer ? "D" : isGto ? "GTO" : isExploit ? "EXP" : "NOOB"}
                 </div>
 
-                {/* Message Content */}
-                <div className="text-sm md:text-base leading-relaxed text-slate-200">
-                  {formatText(turn.content, turn.speaker)}
+                {/* フキダシ部分 */}
+                <div
+                  className={cn(
+                    "p-3 rounded-lg max-w-[80%]",
+                    isDealer && "bg-gray-800 text-gray-300 text-sm w-full text-center border border-gray-700",
+                    isGto && "bg-blue-900/30 text-blue-100 border border-blue-800 rounded-tl-none",
+                    isExploit && "bg-red-900/30 text-red-100 border border-red-800 rounded-tr-none",
+                    isNoob && "bg-green-900/30 text-green-100 border border-green-800"
+                  )}
+                >
+                  {/* 名前ラベル */}
+                  {!isDealer && (
+                    <div
+                      className={cn(
+                        "text-[10px] font-bold mb-1 opacity-70",
+                        isExploit ? "text-right" : "text-left"
+                      )}
+                    >
+                      {isGto ? "GTO BOT" : isExploit ? "EXPLOIT BOT" : "BEGINNER"}
+                    </div>
+                  )}
+
+                  {/* 本文 */}
+                  <div className="whitespace-pre-wrap leading-relaxed">
+                    {formatText(turn.content, turn.speaker)}
+                  </div>
                 </div>
               </div>
-              {/* チャット風の時間表示 */}
+
+              {/* タイムスタンプ */}
               {turn.timestamp && (
                 <span
                   className={cn(
-                    "text-[10px] text-gray-500 mt-1",
-                    isGto ? "text-left ml-12" : "text-right mr-12"
+                    "text-[10px] text-gray-500 mt-1 mx-1",
+                    isGto && "text-left ml-12",
+                    isExploit && "text-right mr-12",
+                    (isDealer || isNoob) && "text-center"
                   )}
                 >
                   {formatMessageTime(turn.timestamp)}

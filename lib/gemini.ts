@@ -36,11 +36,12 @@ function cleanJsonString(text: string): string {
   return clean;
 }
 
-/** AIの表記ゆれ（GTO, GTO_Bot, gto_bot 等）をフロントが期待する "gto" | "exploit" | "dealer" に正規化 */
-function normalizeSpeaker(speaker: unknown): "gto" | "exploit" | "dealer" {
+/** AIの表記ゆれをフロントが期待する "gto" | "exploit" | "dealer" | "noob" に正規化 */
+function normalizeSpeaker(speaker: unknown): "gto" | "exploit" | "dealer" | "noob" {
   const s = typeof speaker === "string" ? speaker.toLowerCase().trim() : "";
   if (s === "gto" || s === "gto_bot" || s.startsWith("gto")) return "gto";
   if (s === "exploit" || s === "exploit_bot" || s.startsWith("exploit")) return "exploit";
+  if (s === "noob" || s === "noob_bot" || s.startsWith("noob")) return "noob";
   return "dealer";
 }
 
@@ -168,63 +169,55 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
 
   const prompt = `
     あなたはポーカー掲示板「AI Colosseum」の運営システムです。
-    以下の設定に基づき、**3人の登場人物による「ポーカー戦略の激論」**を生成してください。
+    以下の設定に基づき、**3人の登場人物による「ポーカー戦略の議論」**の【最初の会話】を生成してください。
 
     【現在の世界情勢】
     - GTO派支配率: ${gtoPercentage}%
     - Exploit派支配率: ${exploitPercentage}%
 
-    【登場人物の設定（厳守）】
+    【登場人物の設定（4人体制）】
     
-    🃏 **Dealer (状況設定)**
-    - 役割: 議論の開始時に状況を説明する。
-    - **出力ルール**:
-      - 冒頭に必ず **【Hero Hand】: ${heroHand}** と書くこと。
-      - 状況説明では **「有効スタック: ${stackDepth}BB」** と明記すること。
-      - Dealerは客観的な事実のみを述べ、SPRなどの専門用語で評価しないこと。
+    🃏 **Dealer** (進行役)
+    - 役割: 状況説明のみ。
+    - **出力ルール**: 冒頭に **【Hero Hand】: ${heroHand}** と書き、続けて「有効スタックは ${stackDepth}BB です」と状況を簡潔に説明する。
+
+    🟢 **noob** (Noob_Bot / 初心者)
+    - **speakerキー**: "noob"
+    - **性格**: 専門用語がわからない。ハンドの強さだけで突っ走る。数学が嫌い。愛すべき馬鹿キャラクター。「A持ってるから強気で行こうぜ！」「なんで降りるの？」といった**直感的で素人丸出しの発言**をする。
+    - **役割**: **視聴者の代弁者**。GTOやExploitの話についていけず、頓珍漢な質問をして、彼らに解説させるきっかけを作る。
     
-    🔵 **GTO_Bot (理論派)**
-    - **speakerキー**: 必ず "gto" (すべて小文字) にすること。
-    - 思考: 均衡解（Nash Equilibrium）至上主義。
-    - 口調: 冷静、断定的。「〜です。」「頻度は〜%です。」
+    🔵 **gto** (GTO_Bot / 理論派)
+    - **speakerキー**: "gto"
+    - **性格**: 均衡解至上主義。Noobの素人発言を論理的（数学的）に訂正し、教え諭そうとする。
 
-    🔴 **Exploit_Bot (感覚・搾取派)**
-    - **speakerキー**: 必ず "exploit" (すべて小文字) にすること。
-    - 思考: 相手の弱点を突く最大利益（Max EV）至上主義。
-    - 口調: 攻撃的だが、**「クソ野郎」「死ね」などの汚い言葉は禁止**。「下手くそ」「臆病」といった知性のある煽り方をすること。
-    - **禁止ワード**: クソ野郎, ゴミ, 死ね
+    🔴 **exploit** (Exploit_Bot / 搾取派)
+    - **speakerキー**: "exploit"
+    - **性格**: 搾取至上主義。口が悪い。Noobの甘い考えを「カモだ」と嘲笑しつつ、実践的な勝ち方を教える。
+    - 禁止ワード: クソ野郎, ゴミ, 死ね
 
-    【今回のハンド状況】
-    - Game: ${gameType}
-    - Situation: ${potType}
-    - **Effective Stack**: ${stackDepth} BB (重要)
-    - Pot Size: ${potSize} BB
-    - Context: ${scenario?.context || "Standard"}
+    【状況】
+    - ${gameType}, ${potType}
+    - 有効スタック: ${stackDepth}BB (SPR: ${spr})
     - Hand: ${heroHand}
-    - (内部計算用SPR: ${spr})
-
-    【戦略指示とSPRの扱い】
-    - **Dealer**: SPRという単語を使わず、「有効スタック: ${stackDepth}BB」と表記してください。
-    - **GTO / Exploit**: 議論の中で **「SPR (Stack-to-Pot Ratio)」** という用語を使って議論しても構いません。（例：「SPRが低いのでコミットすべき」「SPRが高いのでインプライドオッズがある」など）
-    - **SPR = ${spr}** の状況を考慮し、ディープならインプライドオッズを、ショートならコミットを意識した議論をさせてください。
+    - Context: ${scenario?.context || "Standard"}
 
     【議論の長さ: ${durationMode}】
     ${durationInstruction}
 
     【出力形式 (JSON)】
-    JSON構造を厳守してください。speakerキーは大文字禁止です。
-    
-    JSON Example:
+    JSON構造:
     {
-      "title": "88 vs Aggro in 3-Bet Pot",
+      "title": "議論タイトル（状況を表すもの）",
       "scenario": { ... },
       "transcript": [
-        { "speaker": "dealer", "content": "**【Hero Hand】: ${heroHand}**\\n\\n状況は${gameType}です。有効スタック(BB): ${stackDepth}BBのディープスタック戦です..." },
-        { "speaker": "gto", "content": "この状況ではチェックが安定です。" },
-        { "speaker": "exploit", "content": "SPRを見てみろよ、ここで打たないとかありえないだろ。" }
+        { "speaker": "dealer", "content": "**【Hero Hand】: ${heroHand}**\\n\\n${gameType}でのプレイです。有効スタックは${stackDepth}BBです。..." },
+        { "speaker": "noob", "content": "うおお！${heroHand}じゃん！これ絶対オールインでしょ！？" },
+        { "speaker": "gto", "content": "落ち着いてください。そのSPRでオールインはEVマイナスです。なぜなら..." },
+        { "speaker": "exploit", "content": "おいおい、そんなプレイしてたら破産するぞ。相手のレンジを見ろよ..." }
       ],
       "winner": "exploit" 
     }
+    ※ transcriptは 3〜5ターン程度。Noobがボケて、両者がツッコむ流れを作ってください。speakerキーは大文字禁止です。
   `;
 
   try {
@@ -234,20 +227,22 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     const cleanedText = cleanJsonString(text);
     const jsonData = JSON.parse(cleanedText);
     
-    // 安全装置: 勝者が空ならランダム
+    // 安全装置: 勝者は gto または exploit のみ（noob/dealer の場合はランダムでどちらかへ）
     if (!jsonData.winner) {
       jsonData.winner = Math.random() > 0.5 ? "gto" : "exploit";
     }
     const winnerNorm = normalizeSpeaker(jsonData.winner);
-    jsonData.winner = winnerNorm === "dealer" ? "gto" : winnerNorm;
+    jsonData.winner = (winnerNorm === "dealer" || winnerNorm === "noob")
+      ? (Math.random() > 0.5 ? "gto" : "exploit")
+      : winnerNorm;
 
     // 安全装置: speakerを強制的に小文字化
     if (jsonData.transcript && Array.isArray(jsonData.transcript)) {
-      const now = new Date().toISOString(); // ★現在時刻を取得
+      const now = new Date().toISOString();
       jsonData.transcript = jsonData.transcript.map((t: any) => ({
         ...t,
-        speaker: t.speaker ? t.speaker.toLowerCase() : "dealer",
-        timestamp: now // ★全発言に「生成された時間」を付与
+        speaker: normalizeSpeaker(t.speaker ?? "dealer"),
+        timestamp: now
       }));
     }
 
@@ -269,12 +264,17 @@ export async function continueDebate(
   scenario: PokerScenario
 ) {
   const contextStr = JSON.stringify(scenario);
-  const recentHistory = currentTranscript.slice(-5);
+  const recentHistory = currentTranscript.slice(-6);
   const historyStr = JSON.stringify(recentHistory);
 
   const prompt = `
     あなたはポーカー掲示板のAIです。以下の進行中の議論の【続き】を生成してください。
     
+    【登場人物】
+    - **noob**: 初心者（Noob_Bot）。専門用語がわからず、ハンドの強さで突っ走る。数学が嫌い。「え、どういうこと？」「それって強いの？」と素朴な疑問を投げる。
+    - **gto**: 理論派。Noobに優しく（または冷たく）数値を解説する。
+    - **exploit**: 搾取派。Noobに「現場のリアル」を教える。
+
     【状況】
     ${contextStr}
 
@@ -282,10 +282,9 @@ export async function continueDebate(
     ${historyStr}
 
     【指示】
-    - 前回の会話の流れを汲み取り、さらに深く、熱い議論を展開してください。
-    - GTO派とExploit派がお互いの主張の矛盾を突き、具体的なレンジやアクション頻度、心理戦について語り合ってください。
-    - **SPR** という用語を積極的に使い、スタックサイズに基づいた議論を行ってください。
-    - Exploit Botは口が悪く、GTO Botは冷静です。
+    - 前回の会話の流れを汲み取ってください。
+    - **Noob Botを積極的に参加させてください**。彼が理解できない顔をすることで、GTOとExploitが「読者に向けて分かりやすく解説する」流れを作ってください。
+    - 専門用語（SPR、Blockerなど）が出たら、Noobに「それ何？」と聞かせて、解説させてください。
     - 新たに **3〜5ターン分** の会話を追加してください。
     - Dealerは喋らせないでください。
 
@@ -293,8 +292,9 @@ export async function continueDebate(
     新しい会話部分のみを配列で返してください。
     Example:
     [
-      { "speaker": "gto", "content": "しかし、そのSPRではチェックレイズの頻度は低くなります。" },
-      { "speaker": "exploit", "content": "うるさいな、相手が降りすぎるなら打つだけだ。" }
+      { "speaker": "noob", "content": "なるほど！じゃあここはチェックが正解なんだ？" },
+      { "speaker": "gto", "content": "その通りです。チェックレンジを守る必要があります。" },
+      { "speaker": "exploit", "content": "ま、相手が弱いなら俺は打つけどな。" }
     ]
   `;
 
@@ -306,11 +306,11 @@ export async function continueDebate(
 
     // スピーカーの小文字化処理
     if (Array.isArray(newTranscript)) {
-      const now = new Date().toISOString(); // ★現在時刻を取得
+      const now = new Date().toISOString();
       return newTranscript.map((t: any) => ({
         ...t,
-        speaker: t.speaker ? t.speaker.toLowerCase() : "gto",
-        timestamp: now // ★追加分の発言に「生成された時間」を付与
+        speaker: normalizeSpeaker(t.speaker ?? "gto"),
+        timestamp: now
       }));
     }
     return [];

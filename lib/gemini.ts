@@ -241,11 +241,13 @@ export async function generateDebate(scenario?: PokerScenario, context?: DebateC
     const winnerNorm = normalizeSpeaker(jsonData.winner);
     jsonData.winner = winnerNorm === "dealer" ? "gto" : winnerNorm;
 
-    // 安全装置: speakerを正規化（GTO_Bot→gto 等の表記ゆれでフロントが全部Exploit扱いになるのを防ぐ）
+    // 安全装置: speakerを強制的に小文字化
     if (jsonData.transcript && Array.isArray(jsonData.transcript)) {
-      jsonData.transcript = jsonData.transcript.map((t: { speaker?: unknown; content?: string }) => ({
+      const now = new Date().toISOString(); // ★現在時刻を取得
+      jsonData.transcript = jsonData.transcript.map((t: any) => ({
         ...t,
-        speaker: normalizeSpeaker(t.speaker),
+        speaker: t.speaker ? t.speaker.toLowerCase() : "dealer",
+        timestamp: now // ★全発言に「生成された時間」を付与
       }));
     }
 
@@ -302,10 +304,13 @@ export async function continueDebate(
     const cleanedText = cleanJsonString(response.text());
     const newTranscript = JSON.parse(cleanedText);
 
+    // スピーカーの小文字化処理
     if (Array.isArray(newTranscript)) {
-      return newTranscript.map((t: { speaker?: unknown; content?: string }) => ({
+      const now = new Date().toISOString(); // ★現在時刻を取得
+      return newTranscript.map((t: any) => ({
         ...t,
-        speaker: normalizeSpeaker(t.speaker),
+        speaker: t.speaker ? t.speaker.toLowerCase() : "gto",
+        timestamp: now // ★追加分の発言に「生成された時間」を付与
       }));
     }
     return [];

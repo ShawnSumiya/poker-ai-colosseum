@@ -6,6 +6,18 @@ import { renderTextWithCardBadges } from "./CardBadge";
 import { cn } from "@/lib/utils";
 import type { DebateTurn } from "@/lib/types";
 
+/** チャット風の時間表示用（例: "2/17 16:45"） */
+const formatMessageTime = (isoString: string) => {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  return date.toLocaleString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 /** テキスト装飾関数（強化版）: \n → 改行、**text** → 太字、カード表記 → バッジ */
 const formatText = (text: string, _speaker: "gto" | "exploit" | "dealer") => {
   if (!text) return null;
@@ -47,11 +59,14 @@ const formatText = (text: string, _speaker: "gto" | "exploit" | "dealer") => {
 };
 
 /** 後方互換: role がある古いデータも speaker に正規化 */
-function normalizeTurn(turn: DebateTurn | { role?: string; speaker?: string; content: string }): DebateTurn {
+function normalizeTurn(
+  turn: DebateTurn | { role?: string; speaker?: string; content: string; timestamp?: string }
+): DebateTurn {
   const speaker = (turn as DebateTurn).speaker ?? (turn as { role?: string }).role ?? "dealer";
   return {
     speaker: speaker as "gto" | "exploit" | "dealer",
     content: turn.content,
+    ...(turn.timestamp != null && { timestamp: turn.timestamp }),
   };
 }
 
@@ -81,10 +96,15 @@ export function DebateViewer({ transcript, scenario, className }: DebateViewerPr
           // Dealer（状況説明）は中央表示
           if (isDealer) {
             return (
-              <div key={i} className="flex justify-center my-4">
+              <div key={i} className="flex flex-col items-center mb-4">
                 <div className="bg-slate-800/80 text-slate-400 text-sm px-4 py-2 rounded-full border border-slate-700 shadow-sm max-w-[90%] text-center">
                   {formatText(turn.content, "dealer")}
                 </div>
+                {turn.timestamp && (
+                  <span className="text-[10px] text-gray-500 mt-1 text-center">
+                    {formatMessageTime(turn.timestamp)}
+                  </span>
+                )}
               </div>
             );
           }
@@ -94,8 +114,8 @@ export function DebateViewer({ transcript, scenario, className }: DebateViewerPr
             <div
               key={i}
               className={cn(
-                "flex w-full",
-                isGto ? "justify-start" : "justify-end"
+                "flex flex-col w-full mb-4",
+                isGto ? "items-start" : "items-end"
               )}
             >
               <div
@@ -123,6 +143,17 @@ export function DebateViewer({ transcript, scenario, className }: DebateViewerPr
                   {formatText(turn.content, turn.speaker)}
                 </div>
               </div>
+              {/* チャット風の時間表示 */}
+              {turn.timestamp && (
+                <span
+                  className={cn(
+                    "text-[10px] text-gray-500 mt-1",
+                    isGto ? "text-left ml-12" : "text-right mr-12"
+                  )}
+                >
+                  {formatMessageTime(turn.timestamp)}
+                </span>
+              )}
             </div>
           );
         })}

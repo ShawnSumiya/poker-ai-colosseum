@@ -10,8 +10,8 @@ import type { Json } from "@/types/supabase";
 
 export const dynamic = "force-dynamic";
 
-/** サイコロを振る: 1〜100の乱数で、閾値以下なら「投稿する」とみなす */
-const POST_PROBABILITY = 30;
+/** サイコロを振る: 1〜100の乱数で、閾値以下なら「投稿する」とみなす。80%でほぼ毎回投稿（GitHub Actions 無料枠のラグを考慮） */
+const POST_PROBABILITY = 80;
 
 /** durationMode に応じた寿命（ターン数）を決定。新規作成時に1回だけ呼び、結果を transcript_json.maxTurns に保存する */
 function getMaxTurnsForMode(mode: "Short" | "Medium" | "Long"): number {
